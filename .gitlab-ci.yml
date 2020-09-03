@@ -1,0 +1,79 @@
+stages:
+  - build
+  - deploy
+  - test
+
+variables:
+    K: sudo k3s kubectl
+
+build:
+  stage: build
+  tags:
+   - build
+  script:
+        # - cd /home/palc/MyProject
+        # - git clone https://172.26.1.38/apremkum/goldstone-mgmt.git
+
+          - curl -sfL https://get.k3s.io | sh -s - --docker
+          - sudo apt install -qy quilt
+          - cd /home/cicd/myprojects/goldstone-mgmt
+          - sudo make docker
+          - sudo make image
+          - sudo make debug-image
+          - |
+             sudo k3s kubectl create -f ./k8s
+             while [ true ]
+             do
+                sleep 10
+                $K get pods || true
+                ($K logs deploy/gs-mgmt cli | grep "goldstone-tai:modules") && break 0 || true
+             done
+          - |
+             $K exec deploy/gs-mgmt -c cli -- gscli -c "platform; show" | grep sys
+          - |
+              NP2_POD=$($K get pod -o=jsonpath='{.items[0].metadata.name}{"\n"}')
+              NP2_ADDR=$($K get svc netopeer2 -o=jsonpath='{.spec.clusterIP}{"\n"}')
+              ssh-keygen -N '' -f id_rsa <<< y
+              $K exec $NP2_POD -c netopeer2 -- mkdir -p /root/.ssh
+              $K cp id_rsa.pub $NP2_POD:/root/.ssh/authorized_keys -c netopeer2
+          - |
+             cat <<EOF > config.xml 
+             <modules xmlns="http://goldstone.net/yang/tai"> 
+               <module> 
+                 <name>0</name> 
+                  <config> 
+                    <name>0</name> 
+                    <admin-status>down</admin-status> 
+                 </config> 
+                </module> 
+              </modules> 
+             EOF 
+          - cat config.xml
+          - |
+             cat <<EOF > check_np2.sh
+             #!/bin/sh
+             netopeer2-cli <<EOF2
+             auth pref publickey 4
+             auth keys add /data/id_rsa.pub /data/id_rsa
+             auth hostkey-check disable
+             connect --host $NP2_ADDR
+             status
+             get-config --source running --filter-xpath "/goldstone-tai:modules"
+             edit-config --target candidate --config=/data/config.xml
+             get-config --source candidate --filter-xpath "/goldstone-tai:modules"
+             commit
+             EOF2
+             EOF
+          - cat check_np2.sh
+          - chmod +x check_np2.sh
+          - sudo docker run -e NP2_ADDR=$NP2_ADDR --net=host -v $(pwd):/data -w /data docker.io/microsonic/gs-mgmt-netopeer2:latest ./check_np2.sh
+deploy:
+  stage: deploy
+  tags:
+   - deploy
+  script:
+          - sudo docker login -u apremkum -p Palc@1234
+          - sudo docker tag  microsonic/gs-mgmt-debug:latest apremkum/gs-mgmt-debug:latest
+          - sudo docker tag  microsonic/gs-mgmt:latest apremkum/gs-mgmt:latest
+          - sudo docker push apremkum/gs-mgmt-debug:latest
+          - sudo docker push apremkum/gs-mgmt:latest
