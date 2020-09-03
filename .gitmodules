@@ -1,0 +1,30 @@
+[submodule "sm/sonic-mgmt-common"]
+	path = sm/sonic-mgmt-common
+	url = https://github.com/Azure/sonic-mgmt-common.git
+[submodule "sm/OpenNetworkLinux"]
+	path = sm/OpenNetworkLinux
+	url = https://github.com/microsonic/OpenNetworkLinux.git
+[submodule "sm/libnetconf2"]
+	path = sm/libnetconf2
+	url = https://github.com/CESNET/libnetconf2.git
+[submodule "sm/libyang"]
+	path = sm/libyang
+	url = https://github.com/CESNET/libyang.git
+[submodule "sm/libyang-python"]
+	path = sm/libyang-python
+	url = https://github.com/CESNET/libyang-python.git
+[submodule "sm/netopeer2"]
+	path = sm/netopeer2
+	url = https://github.com/CESNET/netopeer2.git
+[submodule "sm/oopt-tai"]
+	path = sm/oopt-tai
+	url = https://github.com/Telecominfraproject/oopt-tai.git
+[submodule "sm/openconfig"]
+	path = sm/openconfig
+	url = https://github.com/openconfig/public.git
+[submodule "sm/sysrepo"]
+	path = sm/sysrepo
+	url = https://github.com/sysrepo/sysrepo.git
+[submodule "sm/sysrepo-python"]
+	path = sm/sysrepo-python
+	url = https://github.com/sysrepo/sysrepo-python.git
