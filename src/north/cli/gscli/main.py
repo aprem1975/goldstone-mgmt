@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 
 import sysrepo as sr
+from sysrepo.session import DATASTORE_VALUES
 
 import argparse
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.completion import Completer
+from prompt_toolkit import patch_stdout
 
 import sys
 import os
@@ -25,27 +27,66 @@ stdout = logging.getLogger('stdout')
 class Root(Object):
     XPATH = '/'
 
-    def __init__(self, sess):
-        self.session = sess
+    def __init__(self, conn):
+        self.session = conn.start_session()
+
+        # TODO consider getting notification xpaths from each commands' classmethod
+        self.session.subscribe_notification_tree("goldstone-tai", "/goldstone-tai:*", 0, 0, self.notification_cb)
+
         super(Root, self).__init__(None)
+
+        @self.command()
+        def show(line):
+            dss = list(DATASTORE_VALUES.keys())
+            if len(line) < 1:
+                raise InvalidInput(f'usage: show <XPATH> [{"|".join(dss)}]')
+
+            if len(line) == 1:
+                ds = 'running'
+            else:
+                ds = line[1]
+
+            if ds not in dss:
+                raise InvalidInput(f'unsupported datastore: {ds}. candidates: {dss}')
+ 
+            self.session.switch_datastore(ds)
+
+            try:
+                print(self.session.get_data(line[0]))
+            except Exception as e:
+                print(e)
+
+        @self.command()
+        def save(line):
+            if len(line) != 1:
+                raise InvalidInput('usage: save <module name>')
+            self.session.switch_datastore('startup')
+
+            try:
+                self.session.copy_config('running', line[0])
+            except sr.SysrepoError as e:
+                print(e)
 
         @self.command()
         def platform(line):
             if len(line) != 0:
                 raise InvalidInput('usage: platform[cr]')
-            return Platform(self.session, self)
+            return Platform(conn, self)
 
         @self.command()
         def transponder(line):
             if len(line) != 0:
                 raise InvalidInput('usage: transponder[cr]')
-            return Transponder(self.session, self)
+            return Transponder(conn, self)
 
         @self.command()
         def sonic(line):
             if len(line) != 0:
                 raise InvalidInput('usage: sonic[cr]')
-            return Sonic(self.session, self)
+            return Sonic(conn, self)
+
+    def notification_cb(self, a, b, c, d):
+        print(b.print_dict())
 
     def __str__(self):
         return ''
@@ -64,7 +105,7 @@ class GoldstoneShell(object):
         if sess == None:
             conn = sr.SysrepoConnection()
             sess = conn.start_session()
-        self.context = Root(sess)
+        self.context = Root(conn)
 
         self.completer = GoldstoneShellCompleter(self.context)
         self.default_input = ''
@@ -118,14 +159,15 @@ class GoldstoneShell(object):
 async def loop_async(shell):
     session = PromptSession()
 
-    while True:
-        c = shell.completer
-        p = shell.prompt()
-        b = shell.bindings()
-        session.app.shell = shell
-        line = await session.prompt_async(p, completer=c, key_bindings=b, default=shell.default_input)
-        if len(line) > 0:
-            await shell.exec(line)
+    with patch_stdout.patch_stdout():
+        while True:
+            c = shell.completer
+            p = shell.prompt()
+            b = shell.bindings()
+            session.app.shell = shell
+            line = await session.prompt_async(p, completer=c, key_bindings=b, default=shell.default_input)
+            if len(line) > 0:
+                await shell.exec(line)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -141,8 +183,8 @@ def main():
     console.setLevel(logging.INFO)
     if args.verbose:
         console.setLevel(logging.DEBUG)
-        log = sr.Logs()
-        log.set_stderr(sr.SR_LL_DBG)
+        logging.basicConfig(level=logging.DEBUG)
+        logging.getLogger('sysrepo').setLevel(logging.DEBUG)
 
     console.setFormatter(formatter)
 
