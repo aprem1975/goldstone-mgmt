@@ -3,7 +3,6 @@ import os
 import re
 
 from .base import Object, InvalidInput, Completer
-from pyang import repository, context
 
 import sysrepo as sr
 import base64
@@ -12,7 +11,18 @@ import struct
 from prompt_toolkit.document import Document
 from prompt_toolkit.completion import WordCompleter, Completion, FuzzyCompleter
 
+from libyang.schema import iter_children
+from _libyang import lib
+import libyang
+
 _FREQ_RE = re.compile(r'.+[kmgt]?hz$')
+
+def get_group(module, name):
+    for child in iter_children(module.context, module.cdata, types=(lib.LYS_GROUPING,), options=lib.LYS_GETNEXT_WITHGROUPING):
+        if child.name() == name:
+            return child
+    return None
+
 
 class TAICompleter(Completer):
     def __init__(self, config, state=None):
@@ -25,44 +35,36 @@ class TAICompleter(Completer):
         super(TAICompleter, self).__init__(self.attrnames, self.valuenames, hook)
 
     def attrnames(self):
-        l = [v.arg for v in self.config.substmts]
+        l = [v.name() for v in self.config]
         if self.state:
-            l += [v.arg for v in self.state.substmts]
+            l += [v.name() for v in self.state]
         return l
 
     def valuenames(self, attrname):
-        for v in self.config.substmts:
-            if attrname == v.arg:
-                t = v.search_one('type')
-                if t.arg == 'boolean':
-                    return ['true', 'false']
-                elif t.arg == 'enumeration':
-                    return [e.arg for e in t.substmts]
+        for v in self.config:
+            if attrname == v.name():
+                t = v.type().name()
+                if t == 'enumeration':
+                    return (t[0] for t in v.type().enums())
+                elif t == 'boolean':
+                    return ('true', 'false')
                 else:
                     return []
         return []
 
 class TAIObject(Object):
 
-    def __init__(self, session, parent, name, type_):
+    def __init__(self, conn, parent, name, type_):
         self.type_ = type_
         self.name = name
         self._get_hook = {}
         self._set_hook = {}
-        self.session = session
+        self.session = conn.start_session()
         super(TAIObject, self).__init__(parent)
 
-        d = self.session.get_ly_ctx().get_searchdirs()
-        repo = repository.FileRepository(d[0])
-        ctx = context.Context(repo)
-
         m = self.session.get_ly_ctx().get_module('goldstone-tai')
-        v = m.print_mem("yang")
-
-        ctx.add_module(None, v)
-        mod = ctx.get_module('goldstone-tai')
-        self.config = mod.search_one('grouping', 'tai-{}-config'.format(type_))
-        self.state = mod.search_one('grouping', 'tai-{}-state'.format(type_))
+        self.config = get_group(m, f'tai-{type_}-config')
+        self.state = get_group(m, f'tai-{type_}-state')
 
         @self.command(FuzzyCompleter(TAICompleter(self.config, self.state)))
         def get(args):
@@ -102,7 +104,10 @@ class TAIObject(Object):
 
             self.session.set_item(f'{self.xpath()}/config/{args[0]}', v)
 
-            self.session.apply_changes()
+            try:
+                self.session.apply_changes()
+            except sr.SysrepoError as e:
+                print(e)
 
         @self.command()
         def show(args):
@@ -179,20 +184,20 @@ class Module(TAIObject):
     def xpath(self):
         return "{}[name='{}']".format(self.XPATH, self.name)
 
-    def __init__(self, session, parent, name):
-        super(Module, self).__init__(session, parent, name, 'module')
+    def __init__(self, conn, parent, name):
+        super(Module, self).__init__(conn, parent, name, 'module')
 
         @self.command(WordCompleter(lambda : self._components('network-interface')))
         def netif(args):
             if len(args) != 1:
                 raise InvalidInput('usage: netif <name>')
-            return NetIf(self.session, self, args[0])
+            return NetIf(conn, self, args[0])
 
         @self.command(WordCompleter(lambda : self._components('host-interface')))
         def hostif(args):
             if len(args) != 1:
                 raise InvalidInput('usage: hostif <name>')
-            return HostIf(self.session, self, args[0])
+            return HostIf(conn, self, args[0])
 
     def __str__(self):
         return 'module({})'.format(self.name)
@@ -206,8 +211,11 @@ class Module(TAIObject):
 class Transponder(Object):
     XPATH = '/goldstone-tai:modules'
 
-    def __init__(self, session, parent):
-        self.session = session
+    def close(self):
+        self.session.stop()
+
+    def __init__(self, conn, parent):
+        self.session = conn.start_session()
         super(Transponder, self).__init__(parent)
 
         @self.command()
@@ -217,11 +225,11 @@ class Transponder(Object):
             self.session.switch_datastore('operational')
             print(self.session.get_data(self.XPATH))
 
-        @self.command(WordCompleter(self._modules()))
+        @self.command(WordCompleter(lambda : self._modules()))
         def module(args):
             if len(args) != 1:
                 raise InvalidInput('usage: module <name>')
-            return Module(self.session, self, args[0])
+            return Module(conn, self, args[0])
 
     def __str__(self):
         return 'transponder'

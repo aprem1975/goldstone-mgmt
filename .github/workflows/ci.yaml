@@ -15,8 +15,6 @@ jobs:
               fetch-depth: 0
         - name: install k3s
           run: curl -sfL https://get.k3s.io | sh -s - --docker
-        - name: install quilt
-          run: sudo apt install -qy quilt
         - name: build builder image if sm/ is updated
           run: git diff --compact-summary HEAD origin/master | (grep 'sm/\|builder.Dockerfile' && make builder np2) || true
         - run: make docker
@@ -32,6 +30,16 @@ jobs:
             done
         - run: |
             $K exec ds/gs-mgmt-cli -- gscli -c "platform; show" | grep sys
+        - run: |
+            git clone https://github.com/microsonic/usonic.git
+            sudo k3s kubectl create -f usonic/k8s
+            SONIC_MGMT_ADDR=$($K get svc sonic-mgmt -o=jsonpath='{.spec.clusterIP}{"\n"}')
+            while [ true ]
+            do
+                sleep 10
+                (curl http://$SONIC_MGMT_ADDR/restconf/data/sonic-port:sonic-port | grep Ethernet1) && exit 0 || true
+            done
+            $K exec ds/gs-mgmt-cli -- gscli -c "sonic; port; show" | grep Ethernet1
         - name: check netopeer2-server is working
           run: |
               NP2_POD=$($K get pod -l app=gs-mgmt-np2 -o=jsonpath='{.items[0].metadata.name}{"\n"}')
