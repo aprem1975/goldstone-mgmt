@@ -1,6 +1,7 @@
 from prompt_toolkit.document import Document
 from prompt_toolkit.completion import Completion, WordCompleter, FuzzyWordCompleter
 from prompt_toolkit.completion import Completer as PromptCompleter
+from enum import Enum
 
 import sys
 import subprocess
@@ -77,7 +78,7 @@ class Object(object):
         self.parent = parent
         self._commands = {}
         self.fuzzy_completion = fuzzy_completion
-
+         
         @self.command()
         def quit(line):
             self.close()
@@ -94,7 +95,7 @@ class Object(object):
             for k, v in self.parent._commands.items():
                 if v['inherit']:
                     self._commands[k] = v
-
+    
     def add_command(self, handler, completer=None, name=None):
         self.command(completer, name)(handler)
 
