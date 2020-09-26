@@ -17,6 +17,9 @@ from prompt_toolkit.completion import WordCompleter, Completion, NestedCompleter
 class Interface(Object):
     XPATH = '/'
 
+    def close(self):
+        self.session.stop()
+
     def xpath(self):
         self.path = '/sonic-port:sonic-port/PORT/PORT_LIST'
         return "{}[ifname='{}']".format(self.path, self.ifname)

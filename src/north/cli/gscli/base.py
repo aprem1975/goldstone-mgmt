@@ -9,7 +9,6 @@ import logging
 
 stdout = logging.getLogger('stdout')
 
-
 class InvalidInput(Exception):
     def __init__(self, msg, candidates=[]):
         self.msg = msg
@@ -81,39 +80,6 @@ class Object(object):
         self.fuzzy_completion = fuzzy_completion
          
         @self.command()
-        def show(line) :
-            if len(line)==1 and line[0] == 'date':
-                print(datetime.datetime.now())
-            else:
-                print("command 'show' have no valid argument",line)
-
-        @self.command()
-        def ping(line):
-            try:
-                png=' '.join(['ping'] + line)
-                subprocess.call(png,shell=True)
-            except KeyboardInterrupt:
-                print("")
-            except :
-                print("Unexpected error:",sys.exc_info()[0])
-        
-        @self.command()
-        def traceroute(line) :
-            try:
-                png=' '.join(['traceroute'] + line)
-                subprocess.call(png,shell=True)
-            except :
-                print("Unexpected error:",sys.exc_info()[0])
-        
-        @self.command()
-        def hostname(line) :
-            try:
-                png=' '.join(['hostname'] + line)
-                subprocess.call(png,shell=True)
-            except :
-                print("Unexpected error:",sys.exc_info()[0])
-
-        @self.command()
         def quit(line):
             self.close()
             if self.parent:
@@ -130,8 +96,6 @@ class Object(object):
                 if v['inherit']:
                     self._commands[k] = v
     
-    
-
     def add_command(self, handler, completer=None, name=None):
         self.command(completer, name)(handler)
 
