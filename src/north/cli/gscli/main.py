@@ -37,9 +37,6 @@ class Root(Object):
         self.session.subscribe_notification_tree("goldstone-tai", "/goldstone-tai:*", 0, 0, self.notification_cb)
 
         super(Root, self).__init__(None)
-        self.cli_mode = 'GS_DEFAULT_MODE'
-        super().set_mode(self.cli_mode)
-        super().set_priv_mode(True)
         #TODO:add timer for inactive user
         vlan = Vlan(conn, self)
         port = Port(conn, self)
@@ -50,6 +47,27 @@ class Root(Object):
                         },
                     'vlan' : {'description'}
                 }
+        
+        @self.command()
+        def show(line):
+            dss = list(DATASTORE_VALUES.keys())
+            if len(line) < 1:
+                raise InvalidInput(f'usage: show <XPATH> [{"|".join(dss)}]')
+
+            if len(line) == 1:
+                ds = 'running'
+            else:
+                ds = line[1]
+
+            if ds not in dss:
+                raise InvalidInput(f'unsupported datastore: {ds}. candidates: {dss}')
+ 
+            self.session.switch_datastore(ds)
+
+            try:
+                print(self.session.get_data(line[0]))
+            except Exception as e:
+                print(e)
 
 
         @self.command()
@@ -77,7 +95,7 @@ class Root(Object):
 
         @self.command(WordCompleter(lambda : self.get_ifnames()))
         def interface(line):
-            if len(line) != 1
+            if len(line) != 1:
                raise InvalidInput('usage: interface <ifname>')
             return Interface(conn, self, line[0])
 

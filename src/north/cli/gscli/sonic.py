@@ -1,7 +1,8 @@
 import sys
 import os
 
-from .base import Object, InvalidInput, Completer, tabular
+from .base import Object, InvalidInput, Completer
+from .library import tabular
 import json
 import sysrepo as sr
 
@@ -176,11 +177,6 @@ class Vlan(Object):
         self.session.switch_datastore('running')
         super(Vlan, self).__init__(parent)
 
-        #@self.command()
-        #def show(args):
-        #    if len(args) != 0:
-        #        raise InvalidInput('usage: show[cr]')
-        #    print (json.dumps(self.tree))
         
         @self.command(WordCompleter(lambda : self._vlan_components()))
         def vlan(args):
@@ -304,11 +300,6 @@ class Port(Object):
         self.session.switch_datastore('running')
         super(Port, self).__init__(parent)
 
-        #@self.command()
-        #def show(args):
-        #    if len(args) != 0:
-        #        raise InvalidInput('usage: show[cr]')
-        #    print (json.dumps(self.tree))
 
         @self.command(WordCompleter(lambda : self._ifname_components()))
         def ifname(args):
